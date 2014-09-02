@@ -77,6 +77,7 @@ bool ParseCommands(const int argc, char ** argv, settings_t &settings) {
   bool return_value = true;
   if (argc < 2) {
     PrintHelp(argv);
+    return_value = false;
   }
   else {
     for (int i = 1; i < argc; i++) {
