@@ -9,7 +9,6 @@
 #include <cstring>
 #include <getch.h>
 #include <cstdlib>
-#include <csignal>
 #include <tcpipnix.h>
 
 struct settings_t {
@@ -23,14 +22,12 @@ states_t state = EXITING;
 
 void PrintHelp(char ** argv);
 bool ParseCommands(const int argc, char ** argv, settings_t &settings);
-void signal_handler(int signal);
 
 int main(int argc, char ** argv) {
   settings_t program_settings;
   TCP tcp_connection;
   int server_socket = false;
   char key_pressed = '\0';
-  signal (SIGINT, signal_handler);
 
   if (ParseCommands(argc, argv, program_settings)) {
     server_socket = tcp_connection.connectToHost(program_settings.ip_address,
@@ -51,14 +48,9 @@ int main(int argc, char ** argv) {
     key_pressed = term::getch(); //start reading keyboard and mouse;
     tcp_connection.sendData(server_socket, (char *) &key_pressed,
         sizeof(key_pressed));
+    if (key_pressed == 0x04)
+      state = EXITING;
     //std::cout << std::hex << (int) key_pressed << std::endl;
-  }
-
-  if (server_socket != false) {
-    //send special key to exit.
-    key_pressed = 0x03;
-    tcp_connection.sendData(server_socket, (char *) &key_pressed,
-        sizeof(key_pressed));
   }
 
   return 0;
@@ -67,7 +59,8 @@ int main(int argc, char ** argv) {
 void PrintHelp(char ** argv) {
   std::cout << "Usage: " << argv[0] << "[OPTION]\n";
   std::cout << "This program connects to a server hosted on a ";
-  std::cout << "windows computer. Specifying the IP address is required\n\n";
+  std::cout << "windows computer. Specifying the IP address is required\n";
+  std::cout << "C-d to exit.\n\n";
 
   std::cout << "-i, --ip-address\t Required. Specifies the IPv4 address.\n";
   std::cout << "-p, --port\t Required. Specifies the communication port.\n";
@@ -109,7 +102,3 @@ bool ParseCommands(const int argc, char ** argv, settings_t &settings) {
   } //end else
   return return_value;
 } //end ParseCommands
-
-void signal_handler(int signal) {
-  state = EXITING;
-}
