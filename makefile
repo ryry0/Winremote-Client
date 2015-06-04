@@ -4,7 +4,7 @@ HEAD_EXT=h
 OBJ_HEAD_EXT=gch
 CC=g++
 CFLAGS=-c -I. -std=c++11
-LDFLAGS=
+LDFLAGS= -lxcb-keysyms -lxcb
 DFLAGS=-DDEBUG -ggdb -g3 -Wall -fdiagnostics-color=auto 
 DEFAULT_DEBUG=y
 
@@ -46,7 +46,7 @@ clean:
 	rm -f $(wildcard *.$(OBJ_EXT)) $(wildcard *.$(OBJ_HEAD_EXT))
 
 run:
-	./$(EXECUTABLE)
+	./$(EXECUTABLE) -i 192.168.1.117 -p 25525 -x
 
 test:
 	gdb -tui -q $(EXECUTABLE)
