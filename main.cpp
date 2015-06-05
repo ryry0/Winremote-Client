@@ -18,9 +18,15 @@
 #include <xcb/xcb_keysyms.h>
 
 struct settings_t {
-  bool use_x_grabkeys;
+  bool enable_xtended_feat;
   char * ip_address;
   unsigned short port;
+};
+
+struct x_key_send_t {
+  char modifier;
+  uint16_t key;
+  bool key_press; //true if pressed, false if key_release
 };
 
 const char CTRL_C = 0x03;
@@ -50,16 +56,17 @@ int main(int argc, char ** argv) {
   xcb_key_symbols_t     *symbols;
   uint32_t mask;
   uint32_t values[2];
+  x_key_send_t          x_key_to_send;
 
   //initialize variables
-  program_settings.use_x_grabkeys = false;
+  program_settings.enable_xtended_feat = false;
   x_connection = xcb_connect(NULL, NULL);
 
   //if parsing the commands is successful
   if (ParseCommands(argc, argv, program_settings)) {
 
     //if user wants to use x_grabkeys
-    if (program_settings.use_x_grabkeys) {
+    if (program_settings.enable_xtended_feat) {
       //get the screen, ask for window id and create window, map it to screen
       screen = xcb_setup_roots_iterator (xcb_get_setup(x_connection)).data;
 
@@ -88,9 +95,10 @@ int main(int argc, char ** argv) {
       xcb_map_window (x_connection, win);
       symbols = xcb_key_symbols_alloc(x_connection);
       xcb_flush(x_connection); //ensure commmands are sent
-    }
+    } //end if (program_settings.enable_xtended_feat)
+
     state = RUNNING;
-    /*
+
     //connect via tcpip
     server_socket = tcp_connection.connectToHost(program_settings.ip_address,
         program_settings.port);
@@ -98,18 +106,18 @@ int main(int argc, char ** argv) {
       state = RUNNING;
       std::cout << "Connected to host at " << program_settings.ip_address <<
         "\n";
-    }
+    } //end if (server_socket != false)
     else {
       std::cout << "Could not connect to host!\n";
-    }
-  */
-  }
+    } //end else
+  } //end if (ParseCommands(argc, argv, program_settings))
+
   else { //if parsing is not successful
     std::cout << "Argument parse error.\n";
   }
 
   //if we are using x grabkeys
-  if (program_settings.use_x_grabkeys) {
+  if (program_settings.enable_xtended_feat) {
     while (state == RUNNING) {
       //grab the keys off stack by in while loop
       while ( (event = xcb_wait_for_event(x_connection)) ) {
@@ -117,15 +125,24 @@ int main(int argc, char ** argv) {
           case XCB_KEY_PRESS:
             //cast the event into a keypress type
             key_press = (xcb_key_press_event_t *) event;
+            //debug data
             printf ("key code: %x\n", key_press->detail);
 
-            printf ("key sym: %c\n",
+            printf ("key sym: %x\n",
                 xcb_key_press_lookup_keysym(symbols, key_press,
                   key_press->state));
 
             PrintModifiers(key_press->state);
             printf ("Key pressed in window %" PRIu32 "\n\n", key_press->event);
 
+            //send the data
+            x_key_to_send.key_press = true;
+            x_key_to_send.key = xcb_key_press_lookup_keysym(symbols, key_press,
+                  0);//key_press->state);
+            x_key_to_send.modifier = key_press->state;
+
+            tcp_connection.sendData(server_socket, (char *) &x_key_to_send,
+                sizeof(x_key_to_send));
             break;
 
           case XCB_KEY_RELEASE:
@@ -147,19 +164,31 @@ int main(int argc, char ** argv) {
                 if (repeat_key_press->time == key_press->time)
                   printf("RUPEET KEY HAUHF\n\n");
               }
+            } //end if (repeat_event != NULL)
+
+            else {
+              //send the data
+              x_key_to_send.key_press = false;
+              x_key_to_send.key = xcb_key_press_lookup_keysym(symbols, key_press,
+                  0); //key_press->state);
+              x_key_to_send.modifier = key_press->state;
+              tcp_connection.sendData(server_socket, (char *) &x_key_to_send,
+                  sizeof(x_key_to_send));
             }
             break;
-        }
-      }
-      //check if you can actually see the keys pressed and modifiers.
+        } //end switch (event->response_type & ~0x80)
+      } //end while ( (event = xcb_wait_for_event(x_connection)) )
+
       //also need to check if the program handles the switch correctly.
       //send them to host
       //check if it is ctrl d
       //exit
       //if (/*ctrl d pressed*/)
       // state = EXITING;
-    }
-  }
+
+    } //end while (state == RUNNING)
+  } //end if (program_settings.enable_xtended_feat)
+
   else { //if we are not using x_grabkeys
     while (state == RUNNING) {
       key_pressed = term::getch(); //start reading keyboard and mouse;
@@ -168,12 +197,11 @@ int main(int argc, char ** argv) {
       if (key_pressed == 0x04)
         state = EXITING;
       //std::cout << std::hex << (int) key_pressed << std::endl;
-    }
-  }
-
+    } //end while
+  } //end else { //if we are not using x_grabkeys
 
   //clean connection
-  if (program_settings.use_x_grabkeys) {
+  if (program_settings.enable_xtended_feat) {
     xcb_disconnect(x_connection);
     xcb_key_symbols_free(symbols);
   }
@@ -189,8 +217,8 @@ void PrintHelp(char ** argv) {
 
   std::cout << "-i, --ip-address\t Required. Specifies the IPv4 address.\n";
   std::cout << "-p, --port\t Required. Specifies the communication port.\n";
-  std::cout << "-x, --x_grabkeys\t Not required. Specifies whether program ";
-  std::cout << "should use xgrabkey function to grab all needed keys. ";
+  std::cout << "-x, --xtended_features\t Not required. Specifies whether program ";
+  std::cout << "should use x-related key functions to grab all needed keys. ";
   std::cout << "This allows natural keybindings.\n";
 } //end PrintHelp
 
@@ -229,8 +257,8 @@ bool ParseCommands(const int argc, char ** argv, settings_t &settings) {
 
       //check for port flag
       else if ((strcmp(argv[i], "-x") == 0) ||
-          (strcmp(argv[i], "--x_grabkeys") == 0)) {
-        settings.use_x_grabkeys = true;
+          (strcmp(argv[i], "--xtended_features") == 0)) {
+        settings.enable_xtended_feat = true;
       } //end else if
     } //end for
   } //end else
